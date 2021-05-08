@@ -2,12 +2,15 @@ package main
 
 import (
 	"auth-service/user"
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
@@ -82,7 +85,11 @@ func main() {
 			},
 		},
 	}
-	n, err := migrate.Exec(postgresDB.DB, "postgres", migrations, migrate.Up)
+	n, err := migrate.Exec(postgresDB.DB, "postgres", migrations, migrate.Down)
+	if err != nil {
+		log.Fatal(err)
+	}
+	n, err = migrate.Exec(postgresDB.DB, "postgres", migrations, migrate.Up)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -105,5 +112,24 @@ func main() {
 		})
 	})
 	user.Routes(e, postgresDB)
-	e.Logger.Fatal(e.Start(":1323"))
+
+	go func() {
+		if err := e.Start(":1323"); err != nil && err != http.ErrServerClosed {
+			e.Logger.Fatal("shutting down the server")
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt)
+	<-quit
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	if err := postgresDB.Close(); err != nil {
+		e.Logger.Fatal(err)
+	}
+	if err := e.Shutdown(ctx); err != nil {
+		e.Logger.Fatal(err)
+	}
+	log.Println("shutting down")
+	os.Exit(0)
 }
