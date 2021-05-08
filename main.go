@@ -78,7 +78,9 @@ func main() {
 						id uuid NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(), 
 						email text UNIQUE, 
 						password text,
-						jwt_credentials json DEFAULT '{}'
+						jwt_credentials json DEFAULT '{}',
+						oauth2_credentials json DEFAULT '{}',
+						oauth2_refresh_token text
 					)`,
 				},
 				Down: []string{"DROP TABLE users"},

@@ -25,11 +25,11 @@ func ErrorResponse(c echo.Context, s int, r error) error {
 	return c.JSON(s, ResponseData{Data: JSONErrs([]error{r})})
 }
 
-func CredentialsResponse(id, token string) map[string]interface{} {
+func CredentialsResponse(id string, oauth2Token *Oauth2Token) map[string]interface{} {
 	return D{
 		"account_id": id,
 		"credentials": D{
-			"jwt": token,
+			"oauth2": oauth2Token,
 		},
 	}
 }

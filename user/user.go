@@ -46,9 +46,11 @@ func (u ReqBody) validate(v *validator.Validate) error {
 }
 
 type User struct {
-	ID       string `db:"id"`
-	Email    string `json:"email" validate:"required,email" db:"email"`
-	Password string `json:"password" validate:"required" db:"password"`
+	ID                   string                 `json:"-" db:"id"`
+	Email                string                 `json:"email" validate:"required,email" db:"email"`
+	Password             string                 `json:"password" validate:"required" db:"password"`
+	JsonOauth2Credential string                 `json:"-" db:"oauth2_credentials"`
+	Oauth2Credential     *kong.Oauth2Credential `json:"-" db:"-"`
 }
 
 func (u *User) hashPassword() string {
@@ -68,13 +70,13 @@ func (u *User) create(db *sqlx.DB) error {
 	return nil
 }
 
-func (u *User) updateCredentials(db *sqlx.DB, jwtCredentials *kong.JWTAuth) error {
-	jsonCredentials, err := json.Marshal(jwtCredentials)
+func (u *User) updateCredentials(db *sqlx.DB, oauth2Credential *kong.Oauth2Credential) error {
+	jsonCredentials, err := json.Marshal(oauth2Credential)
 	if err != nil {
 		return err
 	}
 	_, err = db.Exec(
-		"UPDATE users SET jwt_credentials = $2 WHERE id = $1",
+		"UPDATE users SET oauth2_credentials = $2 WHERE id = $1",
 		u.ID, jsonCredentials)
 	if err != nil {
 		return err
@@ -82,15 +84,45 @@ func (u *User) updateCredentials(db *sqlx.DB, jwtCredentials *kong.JWTAuth) erro
 	return nil
 }
 
-func (u *User) findByEmail(db *sqlx.DB) (*kong.JWTAuth, string, error) {
-	jwtCredentials := new(kong.JWTAuth)
+func (u *User) updateRefreshToken(db *sqlx.DB, token *Oauth2Token) error {
+	_, err := db.Exec(
+		"UPDATE users SET oauth2_refresh_token = $2 WHERE id = $1",
+		u.ID, token.RefreshToken)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *User) findByEmail(db *sqlx.DB) (string, error) {
+	var oauth2CredentialStr string
 	var passwordHash string
 	err := db.QueryRow(
-		"SELECT id, email, password, jwt_credentials FROM users WHERE email = $1",
+		"SELECT id, email, password, oauth2_credentials FROM users WHERE email = $1",
 		u.Email,
-	).Scan(&u.ID, &u.Email, &passwordHash, &jwtCredentials)
+	).Scan(&u.ID, &u.Email, &passwordHash, &oauth2CredentialStr)
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
-	return jwtCredentials, passwordHash, nil
+	err = json.Unmarshal([]byte(oauth2CredentialStr), &u.Oauth2Credential)
+	if err != nil {
+		return "", err
+	}
+	return passwordHash, nil
+}
+
+func (u *User) findByRefreshToken(db *sqlx.DB, refreshToken string) error {
+	var oauth2CredentialStr string
+	err := db.QueryRow(
+		"SELECT id, email, oauth2_credentials FROM users WHERE oauth2_refresh_token LIKE '%' || $1 || '%'",
+		u.Email,
+	).Scan(&u.ID, &u.Email, &refreshToken)
+	if err != nil {
+		return err
+	}
+	err = json.Unmarshal([]byte(oauth2CredentialStr), &u.Oauth2Credential)
+	if err != nil {
+		return err
+	}
+	return nil
 }
