@@ -54,22 +54,18 @@ func (k Kong) CreateConsumerCredentials(user *User) (*kong.Oauth2Credential, err
 		appName = "go-service"
 	}
 	redirectURI := "http://127.0.0.1/callback"
-	oauth2Credential, err := k.Client.Oauth2Credentials.Create(
+	user.Oauth2Credential, err = k.Client.Oauth2Credentials.Create(
 		context.Background(),
 		consumer.ID,
 		&kong.Oauth2Credential{
 			Name: &appName,
-			// ClientID:     &user.Oauth2ClientID,
-			// ClientSecret: &user.Oauth2ClientSecret,
 			RedirectURIs: []*string{&redirectURI},
 		},
 	)
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("%+v, %+v", *oauth2Credential.ClientID, *oauth2Credential.ClientSecret)
-	k.CreateOauth2Token(user)
-	return oauth2Credential, nil
+	return user.Oauth2Credential, nil
 }
 
 func (k Kong) CreateOauth2Token(user *User) (*Oauth2Token, error) {
@@ -101,7 +97,7 @@ func (k Kong) CreateOauth2Token(user *User) (*Oauth2Token, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("%+v", oauth2Token)
+	log.Printf("oauth2Token %+v", oauth2Token)
 	return oauth2Token, nil
 }
 
@@ -136,4 +132,32 @@ func (k Kong) RefreshOauth2Token(user *User, refreshToken string) (*Oauth2Token,
 	}
 	log.Printf("%+v", oauth2Token)
 	return oauth2Token, nil
+}
+
+func (k Kong) DeleteConsumerCredentials() error {
+	consumers, err := k.Client.Consumers.ListAll(context.Background())
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	for _, consumer := range consumers {
+		credentials, _, err := k.Client.Oauth2Credentials.ListForConsumer(context.Background(), consumer.ID, &kong.ListOpt{})
+		if err != nil {
+			log.Println(err)
+			return err
+		}
+		for _, cred := range credentials {
+			err = k.Client.Oauth2Credentials.Delete(context.Background(), consumer.ID, cred.ClientID)
+			if err != nil {
+				log.Println(err)
+				return err
+			}
+		}
+		err = k.Client.Consumers.Delete(context.Background(), consumer.ID)
+		if err != nil {
+			log.Println(err)
+			return err
+		}
+	}
+	return nil
 }

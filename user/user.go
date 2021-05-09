@@ -126,3 +126,11 @@ func (u *User) findByRefreshToken(db *sqlx.DB, refreshToken string) error {
 	}
 	return nil
 }
+
+func clearUserTable(db *sqlx.DB) error {
+	_, err := db.Exec("DELETE FROM users")
+	if err != nil {
+		return err
+	}
+	return nil
+}

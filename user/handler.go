@@ -27,6 +27,10 @@ func NewHandler(db *sqlx.DB, kong *Kong, validator *validator.Validate) *Handler
 }
 
 func (h Handler) postRegister(c echo.Context) error {
+	// teardown old user, consumer for demo
+	clearUserTable(h.db)
+	h.kong.DeleteConsumerCredentials()
+
 	reqBody := ReqBody{}
 	err := c.Bind(&reqBody)
 	if err != nil {
@@ -48,9 +52,9 @@ func (h Handler) postRegister(c echo.Context) error {
 	if err != nil {
 		return ErrorResponse(c, http.StatusInternalServerError, err)
 	}
+	log.Printf("user %+v", user)
 	err = user.updateCredentials(h.db, oauth2Credentials)
 	if err != nil {
-		log.Println(err)
 		return ErrorResponse(c, http.StatusInternalServerError, err)
 	}
 	token, err := h.kong.CreateOauth2Token(user)
@@ -59,7 +63,6 @@ func (h Handler) postRegister(c echo.Context) error {
 	}
 	err = user.updateRefreshToken(h.db, token)
 	if err != nil {
-		log.Println(err)
 		return ErrorResponse(c, http.StatusInternalServerError, err)
 	}
 	return SuccessResponse(c, CredentialsResponse(user.ID, token))
